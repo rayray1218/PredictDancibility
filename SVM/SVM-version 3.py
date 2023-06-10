@@ -9,7 +9,7 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import mean_absolute_error,classification_report
+from sklearn.metrics import mean_absolute_error
 from sklearn.model_selection import GridSearchCV
 
 
@@ -20,6 +20,7 @@ y_train = train['Danceability']
 x_train = train.drop(columns='Danceability')
 x_train = x_train.drop(columns=['Uri', 'Url_spotify', 'Url_youtube',
                                  'id', 'Track', 'Album', 'Description', 'Title', 'Channel', 'Composer', 'Artist'])
+print(x_train['Album_type'].isnull().sum())
 
 #Danceability,Energy,Key,Loudness,Speechiness,Acousticness,Instrumentalness,Liveness,Valence,Tempo,Duration_ms,Views,Likes,Stream,Album_type,Licensed,official_video,id,Track,Album,Uri,Url_spotify,Url_youtube,Comments,Description,Title,Channel,Composer,Artist
 for col in x_train.columns[0:9]:
@@ -39,16 +40,17 @@ x_train[x_train.columns[16]].fillna(mean, inplace=True)
 #fill in blank in Album_type column with unknown
 album_type_column = 'Album_type'
 x_train[album_type_column].fillna('Unknown', inplace=True)
-encoded_cols = pd.get_dummies(x_train[album_type_column], prefix=album_type_column, drop_first=True)
-x_train = pd.concat([x_train, encoded_cols], axis=1)
-x_train.drop(album_type_column, axis=1, inplace=True)
+frequency_map = x_train[album_type_column].value_counts(normalize=True)
+x_train[album_type_column] = x_train[album_type_column].map(frequency_map)
 
 
-boolean_columns = ['Licensed', 'official_video', 'Album_type_album', 'Album_type_compilation', 'Album_type_single']
+
+boolean_columns = ['Licensed', 'official_video']
 #fill in blank in boolean colume with false
 for col in boolean_columns:
     x_train[col].fillna(False, inplace=True)
     x_train[col] = x_train[col].astype(int)
+
 
 x_train.to_csv('x_train_for_SVM.csv', index=False)
 
@@ -64,6 +66,7 @@ y_train = y_train.values
 test = pd.read_csv('test.csv')
 x_test = test.drop(columns=['Uri', 'Url_spotify', 'Url_youtube',
                                  'id', 'Track', 'Album', 'Description', 'Title', 'Channel', 'Composer', 'Artist'])
+print(x_test['Album_type'].isnull().sum())
 for col in x_test.columns[0:9]:
     if col == x_test.columns[1]:
         mean = np.round(x_test[col].mean())
@@ -80,12 +83,11 @@ x_test[x_test.columns[16]].fillna(mean, inplace=True)
 
 album_type_column = 'Album_type'
 x_test[album_type_column].fillna('Unknown', inplace=True)
-encoded_cols = pd.get_dummies(x_test[album_type_column], prefix=album_type_column, drop_first=True)
-x_test = pd.concat([x_test, encoded_cols], axis=1)
-x_test.drop(album_type_column, axis=1, inplace=True)
+frequency_map = x_test[album_type_column].value_counts(normalize=True)
+x_test[album_type_column] = x_test[album_type_column].map(frequency_map)
 
 
-boolean_columns = ['Licensed', 'official_video', 'Album_type_album', 'Album_type_compilation', 'Album_type_single']
+boolean_columns = ['Licensed', 'official_video']
 
 for col in boolean_columns:
     x_test[col].fillna(False, inplace=True)
@@ -96,7 +98,6 @@ x_test.to_csv('x_test_for_SVM.csv', index=False)
 #standardization
 scaler = StandardScaler()
 X_test_scaled = scaler.fit_transform(x_test)
-
 x_test = X_test_scaled
 
 #True test data
@@ -108,16 +109,16 @@ y_true_test = truetest['Danceability']
 model = SVC()
 param_grid = [
     {'kernel': [ 'rbf'],
-    'C': [0.1, 1, 10,100,1000],
-    'gamma':[1, 0.1, 0.01, 0.001, 0.0001]},
-    {'kernel': [ 'linear'],
-    'C': [0.1, 1, 10,100,1000],
-    }
-
+    'C': [ 1.3,2,2.5],
+    'gamma':[0.1]},
+    {'kernel': [ 'poly'],
+    'C': [0.1,0.01,1,10],
+    'gamma':[0.1]}
 ]
 #MAE乘以-1因為default是取最大值
-num_folds = 5
+num_folds = 10
 grid_search = GridSearchCV(model, param_grid, cv=num_folds, scoring='neg_mean_absolute_error',refit=True)
+
 
 #model training 
 startTime = time.time()
@@ -127,13 +128,15 @@ print("Total Training Time:", endTime-startTime)
 #print the best combinations
 print("Best Parameters:", grid_search.best_params_)
 print("Best Score (neg MAE):", -grid_search.best_score_)
-
+cv_results = grid_search.cv_results_
+mean_absolute_errors = -cv_results['mean_test_score']
 best_model = grid_search.best_estimator_
-
+for i, mae in enumerate(mean_absolute_errors):
+    print("Fold {} MAE: {:.4f}".format(i+1, mae))
 #predict
 y_pred = best_model.predict(x_test)
-mae=mean_absolute_error(y_true_test, y_pred[1701:1701+630])
-print("Eout(partial)",mae)
+#mae=mean_absolute_error(y_true_test.values, y_pred[1701:1701+631])
+#print("Eout(partial)",mae)
 results = pd.DataFrame({'id': test['id'], 'Danceability': y_pred})
 
-results.to_csv('svm-v2.csv', index=False)
+results.to_csv('svm-v3.csv', index=False)
