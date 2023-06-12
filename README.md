@@ -13,3 +13,4 @@
 1. Logistic regression
 2. SVM
 3. CNN
+4. Random Forest
