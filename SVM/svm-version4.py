@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import time
-from sklearn.svm import SVC
+from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import cross_val_score
 from sklearn.model_selection import cross_validate
@@ -20,7 +20,6 @@ y_train = train['Danceability']
 x_train = train.drop(columns='Danceability')
 x_train = x_train.drop(columns=['Uri', 'Url_spotify', 'Url_youtube',
                                  'id', 'Track', 'Album', 'Description', 'Title', 'Channel', 'Composer', 'Artist'])
-print(x_train['Album_type'].isnull().sum())
 
 #Danceability,Energy,Key,Loudness,Speechiness,Acousticness,Instrumentalness,Liveness,Valence,Tempo,Duration_ms,Views,Likes,Stream,Album_type,Licensed,official_video,id,Track,Album,Uri,Url_spotify,Url_youtube,Comments,Description,Title,Channel,Composer,Artist
 for col in x_train.columns[0:9]:
@@ -52,21 +51,22 @@ for col in boolean_columns:
     x_train[col] = x_train[col].astype(int)
 
 
-x_train.to_csv('x_train_for_SVM.csv', index=False)
-
+x_train.to_csv('x_train_for_randomforest.csv', index=False)
+#分為測試集跟訓練集
+xtrain,xtest,ytrain,ytest=train_test_split(x_train,y_train,test_size=0.1,random_state=42)
 #standardization
-scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(x_train)
 
-x_train = X_train_scaled
-y_train = y_train.values
+x_train = StandardScaler().fit_transform(xtrain)
+x_intest=StandardScaler().fit_transform(xtest)
+
+y_intest,y_train = ytest,ytrain
 
 
 #test data
 test = pd.read_csv('test.csv')
 x_test = test.drop(columns=['Uri', 'Url_spotify', 'Url_youtube',
                                  'id', 'Track', 'Album', 'Description', 'Title', 'Channel', 'Composer', 'Artist'])
-print(x_test['Album_type'].isnull().sum())
+
 for col in x_test.columns[0:9]:
     if col == x_test.columns[1]:
         mean = np.round(x_test[col].mean())
@@ -93,7 +93,7 @@ for col in boolean_columns:
     x_test[col].fillna(False, inplace=True)
     x_test[col] = x_test[col].astype(int)
 
-x_test.to_csv('x_test_for_SVM.csv', index=False)
+x_test.to_csv('x_test_for_randomforest.csv', index=False)
 
 #standardization
 scaler = StandardScaler()
@@ -106,17 +106,11 @@ truetest = pd.read_csv('test_partial_answer.csv')
 y_true_test = truetest['Danceability']
 
 #model select and perform V-fold cross-validation plus grid search in rbf and linear 
-model = SVC()
+model = SVR()
 param_grid = [
-    {'kernel': [ 'rbf'],
-    'C': [ 1.3,2,2.5],
-    'gamma':[0.1]},
-    {'kernel': [ 'poly'],
-    'C': [0.1,0.01,1,10],
-    'gamma':[0.1]}
-]
+    {'kernel': [ 'rbf'],'C': [0.1,0.6,1,1.4,10],'gamma':[0.1,0.01,1,10,0.001]},]
 #MAE乘以-1因為default是取最大值
-num_folds = 10
+num_folds = 5
 grid_search = GridSearchCV(model, param_grid, cv=num_folds, scoring='neg_mean_absolute_error',refit=True)
 
 
@@ -131,12 +125,15 @@ print("Best Score (neg MAE):", -grid_search.best_score_)
 cv_results = grid_search.cv_results_
 mean_absolute_errors = -cv_results['mean_test_score']
 best_model = grid_search.best_estimator_
-for i, mae in enumerate(mean_absolute_errors):
-    print("Fold {} MAE: {:.4f}".format(i+1, mae))
+
+#validation完之後的測試集
+y_pred_intest=best_model.predict(x_intest)
+y_pred_intest= np.round(y_pred_intest)
+mae=mean_absolute_error(y_intest ,y_pred_intest)
+print("Eout(split)",mae)
 #predict
 y_pred = best_model.predict(x_test)
-#mae=mean_absolute_error(y_true_test.values, y_pred[1701:1701+631])
-#print("Eout(partial)",mae)
+y_pred= np.round(y_pred)
 results = pd.DataFrame({'id': test['id'], 'Danceability': y_pred})
 
-results.to_csv('svm-v3.csv', index=False)
+results.to_csv('svm-v4.csv', index=False)
