@@ -10,7 +10,7 @@
 
 我們設計了以下不同的模型來進行可跳性預測：
 
-1. Logistic regression
+1. SGD regression
 2. SVM
 3. CNN
 4. Random Forest
