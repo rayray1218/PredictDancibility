@@ -11,6 +11,9 @@ The dataset used contains features of songs and their corresponding danceability
 We have designed the following different models for danceability prediction:
 
 1.SGD regression
+
 2.SVM
+
 3.CNN
+
 4.Random Forest
