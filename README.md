@@ -17,3 +17,7 @@ We have designed the following different models for danceability prediction:
 3.CNN
 
 4.Random Forest
+
+#How it works?
+
+You can find the workflow of this project in our final report.
